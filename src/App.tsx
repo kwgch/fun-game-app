@@ -172,13 +172,23 @@ function App() {
 
   const changeDifficulty = (newDifficulty: Difficulty) => {
     setDifficulty(newDifficulty)
-    setTimeout(initializeGame, 100)
   }
+  
+  useEffect(() => {
+    if (difficulty) {
+      initializeGame()
+    }
+  }, [difficulty])
   
   const changeSymbolSet = (newSymbolSet: SymbolSet) => {
     setSymbolSet(newSymbolSet)
-    setTimeout(initializeGame, 100)
   }
+  
+  useEffect(() => {
+    if (symbolSet) {
+      initializeGame()
+    }
+  }, [symbolSet])
 
   useEffect(() => {
     let interval: number | undefined
