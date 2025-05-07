@@ -3,7 +3,7 @@ import './App.css'
 import { Button } from './components/ui/button'
 import { Card } from './components/ui/card'
 import { Badge } from './components/ui/badge'
-import { Gamepad2, Trophy, RotateCcw, Clock, Star } from 'lucide-react'
+import { Gamepad2, Trophy, RotateCcw, Clock, Star, Eye, AlertTriangle } from 'lucide-react'
 
 type CardType = {
   id: number
@@ -13,42 +13,61 @@ type CardType = {
 }
 
 type Difficulty = 'easy' | 'medium' | 'hard'
+type SymbolSet = 'emoji' | 'hieroglyphics' | 'cuneiform'
 
 function App() {
   const [cards, setCards] = useState<CardType[]>([])
   const [flippedCards, setFlippedCards] = useState<number[]>([])
+  const [lastFlippedCard, setLastFlippedCard] = useState<number | null>(null)
   const [moves, setMoves] = useState(0)
   const [gameWon, setGameWon] = useState(false)
   const [score, setScore] = useState(0)
   const [timer, setTimer] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
   const [difficulty, setDifficulty] = useState<Difficulty>('medium')
+  const [symbolSet, setSymbolSet] = useState<SymbolSet>('emoji')
+  const [peekActive, setPeekActive] = useState(false)
+  const [peekUsed, setPeekUsed] = useState(false)
+  const [peekTimeLeft, setPeekTimeLeft] = useState(3)
 
   const allEmojis = {
     animals: ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼', '🐨', '🦁', '🐯', '🦄'],
     fruits: ['🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🫐', '🍈', '🍒', '🥭'],
     vehicles: ['🚗', '🚕', '🚙', '🚌', '🚎', '🏎️', '🚓', '🚑', '🚒', '🚚', '🚛', '✈️']
   }
+  
+  const hieroglyphics = ['𓀀', '𓀁', '𓀂', '𓀃', '𓀄', '𓀅', '𓀆', '𓀇', '𓀈', '𓀉', '𓀊', '𓀋', '𓀌', '𓀍', '𓀎', '𓀏', '𓀐', '𓀑', '𓀒', '𓀓', '𓀔', '𓀕', '𓀖', '𓀗']
+  
+  const cuneiform = ['𒀀', '𒀁', '𒀂', '𒀃', '𒀄', '𒀅', '𒀆', '𒀇', '𒀈', '𒀉', '𒀊', '𒀋', '𒀌', '𒀍', '𒀎', '𒀏', '𒀐', '𒀑', '𒀒', '𒀓', '𒀔', '𒀕']
 
-  const getEmojisForDifficulty = (): string[] => {
-    const categories = Object.values(allEmojis)
-    const randomCategory = categories[Math.floor(Math.random() * categories.length)]
+  const getSymbolsForDifficulty = (): string[] => {
+    let symbols: string[] = []
+    
+    if (symbolSet === 'emoji') {
+      const categories = Object.values(allEmojis)
+      const randomCategory = categories[Math.floor(Math.random() * categories.length)]
+      symbols = randomCategory
+    } else if (symbolSet === 'hieroglyphics') {
+      symbols = hieroglyphics
+    } else if (symbolSet === 'cuneiform') {
+      symbols = cuneiform
+    }
     
     switch(difficulty) {
       case 'easy':
-        return randomCategory.slice(0, 6)
+        return symbols.slice(0, 6)
       case 'hard':
-        return randomCategory
+        return symbols.slice(0, 12)
       case 'medium':
       default:
-        return randomCategory.slice(0, 8)
+        return symbols.slice(0, 8)
     }
   }
 
   const initializeGame = () => {
-    const emojisToUse = getEmojisForDifficulty()
+    const symbolsToUse = getSymbolsForDifficulty()
     
-    const initialCards = [...emojisToUse, ...emojisToUse]
+    const initialCards = [...symbolsToUse, ...symbolsToUse]
       .sort(() => Math.random() - 0.5)
       .map((emoji, index) => ({
         id: index,
@@ -59,21 +78,57 @@ function App() {
 
     setCards(initialCards)
     setFlippedCards([])
+    setLastFlippedCard(null)
     setMoves(0)
     setGameWon(false)
     setScore(0)
     setTimer(0)
     setIsPlaying(true)
+    setPeekUsed(false)
+    setPeekActive(false)
+    setPeekTimeLeft(3)
+  }
+  
+  const activatePeek = () => {
+    if (peekUsed || peekActive) return
+    
+    setPeekActive(true)
+    setPeekUsed(true)
+    
+    const countdownInterval = setInterval(() => {
+      setPeekTimeLeft(prev => {
+        if (prev <= 1) {
+          clearInterval(countdownInterval)
+          setPeekActive(false)
+          return 3
+        }
+        return prev - 1
+      })
+    }, 1000)
+    
+    setTimeout(() => {
+      setPeekActive(false)
+      clearInterval(countdownInterval)
+      setPeekTimeLeft(3)
+    }, 3000)
   }
 
   const handleCardClick = (id: number) => {
+    if (peekActive) return
+    
     if (gameWon || cards[id].flipped || cards[id].matched || flippedCards.length >= 2) {
+      return
+    }
+    
+    if (lastFlippedCard === id) {
       return
     }
 
     const updatedCards = [...cards]
     updatedCards[id].flipped = true
     setCards(updatedCards)
+    
+    setLastFlippedCard(id)
     
     const updatedFlippedCards = [...flippedCards, id]
     setFlippedCards(updatedFlippedCards)
@@ -90,9 +145,14 @@ function App() {
         updatedCards[secondCardId].matched = true
         setCards(updatedCards)
         setFlippedCards([])
+        setLastFlippedCard(null)
         
         const difficultyMultiplier = difficulty === 'easy' ? 5 : difficulty === 'medium' ? 10 : 15
-        setScore(score + difficultyMultiplier)
+        const symbolSetMultiplier = symbolSet === 'emoji' ? 1 : symbolSet === 'hieroglyphics' ? 1.5 : 2
+        const movesPenalty = Math.max(0, 20 - moves) / 10
+        
+        const pointsEarned = Math.round(difficultyMultiplier * symbolSetMultiplier * (1 + movesPenalty))
+        setScore(score + pointsEarned)
         
         if (updatedCards.every(card => card.matched)) {
           setGameWon(true)
@@ -104,6 +164,7 @@ function App() {
           updatedCards[secondCardId].flipped = false
           setCards(updatedCards)
           setFlippedCards([])
+          setLastFlippedCard(null)
         }, 1000)
       }
     }
@@ -111,6 +172,11 @@ function App() {
 
   const changeDifficulty = (newDifficulty: Difficulty) => {
     setDifficulty(newDifficulty)
+    setTimeout(initializeGame, 100)
+  }
+  
+  const changeSymbolSet = (newSymbolSet: SymbolSet) => {
+    setSymbolSet(newSymbolSet)
     setTimeout(initializeGame, 100)
   }
 
@@ -140,16 +206,17 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-100 to-purple-100 flex flex-col items-center p-4">
-      <header className="mb-6 text-center">
+      <header className="mb-4 text-center">
         <div className="flex items-center justify-center gap-2 mb-2">
           <Gamepad2 size={32} className="text-purple-600" />
           <h1 className="text-3xl font-bold text-purple-800">記憶ゲーム</h1>
           <Gamepad2 size={32} className="text-purple-600" />
         </div>
         <p className="text-gray-600">カードをめくって、ペアを見つけよう！</p>
+        <p className="text-xs text-gray-500 mt-1">※直前に開いたカードは再度開けません</p>
       </header>
 
-      <div className="flex flex-wrap justify-center gap-2 mb-4">
+      <div className="flex flex-wrap justify-center gap-2 mb-3">
         <Button 
           variant={difficulty === 'easy' ? 'default' : 'outline'} 
           size="sm"
@@ -175,8 +242,35 @@ function App() {
           難しい
         </Button>
       </div>
+      
+      <div className="flex flex-wrap justify-center gap-2 mb-4">
+        <Button 
+          variant={symbolSet === 'emoji' ? 'default' : 'outline'} 
+          size="sm"
+          onClick={() => changeSymbolSet('emoji')}
+          className={symbolSet === 'emoji' ? 'bg-purple-600 hover:bg-purple-700' : ''}
+        >
+          絵文字
+        </Button>
+        <Button 
+          variant={symbolSet === 'hieroglyphics' ? 'default' : 'outline'} 
+          size="sm"
+          onClick={() => changeSymbolSet('hieroglyphics')}
+          className={symbolSet === 'hieroglyphics' ? 'bg-amber-600 hover:bg-amber-700' : ''}
+        >
+          象形文字
+        </Button>
+        <Button 
+          variant={symbolSet === 'cuneiform' ? 'default' : 'outline'} 
+          size="sm"
+          onClick={() => changeSymbolSet('cuneiform')}
+          className={symbolSet === 'cuneiform' ? 'bg-stone-600 hover:bg-stone-700' : ''}
+        >
+          楔形文字
+        </Button>
+      </div>
 
-      <div className="flex flex-wrap justify-center gap-4 mb-6">
+      <div className="flex flex-wrap justify-center gap-3 mb-4">
         <Badge variant="outline" className="text-sm px-3 py-1 bg-white flex items-center gap-1">
           <Clock size={14} /> {formatTime(timer)}
         </Badge>
@@ -186,7 +280,25 @@ function App() {
         <Badge variant="outline" className="text-sm px-3 py-1 bg-white flex items-center gap-1">
           <Star size={14} /> スコア: {score}
         </Badge>
+        
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={activatePeek}
+          disabled={peekUsed || peekActive}
+          className={`flex items-center gap-1 ${peekActive ? 'bg-yellow-200' : ''} ${peekUsed ? 'opacity-50 cursor-not-allowed' : ''}`}
+        >
+          <Eye size={14} />
+          {peekActive ? `チラ見せ中 (${peekTimeLeft}秒)` : 'チラ見せチャンス'}
+        </Button>
       </div>
+      
+      {peekActive && (
+        <div className="mb-4 flex items-center justify-center gap-2 text-amber-600">
+          <AlertTriangle size={16} />
+          <p className="text-sm">全てのカードが一時的に表示されています！</p>
+        </div>
+      )}
 
       <div className={`grid gap-3 max-w-3xl mx-auto ${
         difficulty === 'easy' ? 'grid-cols-3 md:grid-cols-4' : 
@@ -205,8 +317,10 @@ function App() {
             } ${card.matched ? 'border-2 border-green-500' : ''}`}
             onClick={() => handleCardClick(card.id)}
           >
-            {(card.flipped || card.matched) ? (
-              <span className="text-3xl">{card.emoji}</span>
+            {(card.flipped || card.matched || peekActive) ? (
+              <span className={`text-3xl ${symbolSet === 'hieroglyphics' ? 'text-amber-800' : symbolSet === 'cuneiform' ? 'text-stone-800' : ''}`}>
+                {card.emoji}
+              </span>
             ) : null}
           </Card>
         ))}
